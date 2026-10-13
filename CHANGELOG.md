@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/cuongnbms/pi-model-fallback-alias/compare/v0.2.0...v0.3.0) (2026-10-13)
+
+
+### Features
+
+* merge configured alias targets ([6f02144](https://github.com/cuongnbms/pi-model-fallback-alias/commit/6f0214426012fde77f4723b35029e73324e62c13))
+* add alias chain selector ([8753bdd](https://github.com/cuongnbms/pi-model-fallback-alias/commit/8753bdd991a8e39b540d03013d94373461918384))
+* add model-alias-chain command ([6208a2a](https://github.com/cuongnbms/pi-model-fallback-alias/commit/6208a2a4016563e4b52f5d07e0a44970e3ce5296))
+
 ## [0.2.0](https://github.com/unrelentingfox/pi-model-fallback-alias/compare/v0.1.1...v0.2.0) (2026-09-15)
 
 

@@ -200,8 +200,8 @@ optional wildcard peer dependencies because Pi supplies them when loading the
 extension. Continuous integration tests Node 22.19 and Node 24.
 
 Releases use semantic versioning. Release Please maintains the release pull
-request from semantic commits; merging it creates the GitHub release and
-publishes to npm with OpenID Connect (OIDC) provenance. Follow [RELEASING.md](RELEASING.md).
+request from semantic commits; merging it creates the GitHub release.
+Follow [RELEASING.md](RELEASING.md).
 
 Repository: https://github.com/unrelentingfox/pi-model-fallback-alias
 

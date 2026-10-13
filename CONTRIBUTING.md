@@ -37,4 +37,4 @@ repository rules must require `Validate Conventional Commit title`. The check
 appears on subsequent PRs, not on the PR that first adds the workflow.
 
 Follow [RELEASING.md](RELEASING.md); merging the Release Please pull request
-creates the GitHub release and publishes it to npm with provenance.
+creates the GitHub release.

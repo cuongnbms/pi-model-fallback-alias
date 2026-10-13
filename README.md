@@ -112,6 +112,7 @@ Use an alias anywhere Pi accepts a model reference:
 - `/model-alias-targets [role]` renders all flattened fallback chains, or one selected
   role, in the transcript.
 - `/model-alias-latency-report [role]` renders attempt statistics in the transcript.
+- `/model-alias-chain [role]` edits one role's concrete fallback targets. Nested alias targets are kept. Run `/reload` after saving.
 
 ## State and logs
 

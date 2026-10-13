@@ -1,3 +1,4 @@
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createProvider } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { MAP_PATH, createPolicyLoader, loadAliasConfig } from "./src/alias-config.ts";
@@ -8,8 +9,11 @@ import { createAliasAuth } from "./src/alias/auth-gate.ts";
 import { createSharedCooldownRegistry } from "./src/cooldown-store.ts";
 import { createDebugLog, type DebugLog } from "./src/debug-log.ts";
 import { describeFailure, type AliasConfig, type CooldownRegistry } from "./src/fallback/index.ts";
+import { isRecord } from "./src/fallback/refs.ts";
 import { EXTENSION_LATENCY_LOG_PATH, expandLogPaths, readLatencyLog } from "./src/latency/log.ts";
 import { createLatencyReport, createLatencyReportEntry } from "./src/latency/report.ts";
+import { configuredTargets, droppedConcreteCount, initialChecked, keptAliasCount, saveRoleChain } from "./src/setup/chain-document.ts";
+import { createChainSelector } from "./src/setup/chain-selector.ts";
 import { renderStatusTick, startSession, type AliasSession as StatusSession } from "./src/status/session-status.ts";
 import {
 	appendAliasTargetsEntry,
@@ -42,6 +46,10 @@ export interface PiModelAliasDependencies {
 	debugLog?: DebugLog;
 	cooldowns?: CooldownRegistry;
 	timers?: import("./src/fallback/types.ts").TimerApi;
+	mapPath?: string;
+	readAliasMap?(path: string): string;
+	writeAliasMap?(path: string, data: string): void;
+	renameAliasMap?(from: string, to: string): void;
 }
 
 export default function piModelAlias(pi: ExtensionAPI): void {
@@ -51,6 +59,10 @@ export default function piModelAlias(pi: ExtensionAPI): void {
 export function installPiModelAlias(pi: ExtensionAPI, dependencies: PiModelAliasDependencies = {}): void {
 	const debugLog = dependencies.debugLog ?? DEBUG_LOG;
 	const targetCooldowns = dependencies.cooldowns ?? TARGET_COOLDOWNS;
+	const mapPath = dependencies.mapPath ?? MAP_PATH;
+	const readAliasMap = dependencies.readAliasMap ?? ((path: string) => readFileSync(path, "utf8"));
+	const writeAliasMap = dependencies.writeAliasMap ?? ((path: string, data: string) => writeFileSync(path, data, "utf8"));
+	const renameAliasMap = dependencies.renameAliasMap ?? ((from: string, to: string) => renameSync(from, to));
 	const aliasConfig = dependencies.aliasConfig ?? loadAliasConfig(debugLog);
 	const { aliases } = aliasConfig;
 	let pendingConfigWarnings = [...aliasConfig.warnings];
@@ -200,6 +212,75 @@ export function installPiModelAlias(pi: ExtensionAPI, dependencies: PiModelAlias
 			const role = args.trim() || undefined;
 			const report = createLatencyReport(readLatencyLog(expandLogPaths([EXTENSION_LATENCY_LOG_PATH])));
 			appendLatencyReportEntry(pi, createLatencyReportEntry(report, [...aliases.keys()], role));
+		},
+	});
+
+	pi.registerCommand("model-alias-chain", {
+		description: "Edit one alias role's concrete fallback targets",
+		getArgumentCompletions: (prefix) => [...aliases.keys()]
+			.filter((role) => role.startsWith(prefix))
+			.map((role) => ({ value: role, label: role })),
+		handler: async (args, ctx) => {
+			if (ctx.mode !== "tui") {
+				ctx.ui.notify("/model-alias-chain requires TUI mode", "warning");
+				return;
+			}
+			let root: Record<string, unknown>;
+			try {
+				const parsed = JSON.parse(readAliasMap(mapPath)) as unknown;
+				if (!isRecord(parsed)) throw new Error("expected a JSON object");
+				root = parsed;
+			} catch (error) {
+				ctx.ui.notify(`Could not read model-alias map: ${describeFailure(error)}`, "warning");
+				return;
+			}
+			const roles = Object.keys(root).filter((key) => !key.startsWith("$"));
+			if (roles.length === 0) {
+				ctx.ui.notify("No model aliases to edit", "warning");
+				return;
+			}
+			const requested = args.trim();
+			const role = requested || (await ctx.ui.select("Select an alias role", roles));
+			if (!role) return;
+			if (!roles.includes(role)) {
+				ctx.ui.notify(`Model alias "${role}" is no longer in the map`, "warning");
+				return;
+			}
+			const models = ctx.modelRegistry.getAll()
+				.filter((model) => model.provider !== PROVIDER_ID)
+				.map((model) => ({ provider: model.provider, id: model.id, name: model.name }));
+			if (models.length === 0) {
+				ctx.ui.notify("No catalog models available", "warning");
+				return;
+			}
+			const catalog = new Set(models.map((model) => `${model.provider}/${model.id}`));
+			const targets = configuredTargets(root[role]);
+			await ctx.ui.custom((tui, theme, keybindings, done) => createChainSelector({
+				role,
+				models,
+				checked: initialChecked(targets, catalog),
+				droppedCount: droppedConcreteCount(targets, catalog),
+				keptAliasCount: keptAliasCount(targets),
+				keybindings,
+				theme,
+				tui: {
+					requestRender: () => {
+						if (typeof tui.requestRender === "function") tui.requestRender();
+					},
+				},
+				onSave: (checked) => {
+					const result = saveRoleChain({
+						path: mapPath,
+						role,
+						checked,
+						catalog,
+						fs: { readFileSync: readAliasMap, writeFileSync: writeAliasMap, renameSync: renameAliasMap },
+					});
+					ctx.ui.notify(result.ok ? `Saved ${role}. Run /reload to apply.` : result.message, result.ok ? "info" : "warning");
+					return result.ok;
+				},
+				onCancel: () => done(undefined),
+			}));
 		},
 	});
 }
